@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Optimizador Inteligente de Gastos Personales</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Navbar -->
+    <div class="navbar">
+        <button class="menu-btn" onclick="toggleMenu()">☰</button>
+        <h1 class="app-title">Optimizador de Gastos</h1>
+        <div class="navbar-spacer"></div>
+    </div>
+
+    <!-- Sidebar -->
+    <div id="sidebar" class="sidebar">
+        <div class="sidebar-header">
+            <h2>Menú</h2>
+            <button class="close-btn" onclick="toggleMenu()">✕</button>
+        </div>
+        <nav class="sidebar-nav">
+            <button class="nav-btn active" onclick="mostrarSeccion('dashboard', this)">
+                <span class="icon">📊</span> Dashboard
+            </button>
+            <button class="nav-btn" onclick="mostrarSeccion('usuario', this)">
+                <span class="icon">👤</span> Usuario
+            </button>
+            <button class="nav-btn" onclick="mostrarSeccion('gastos', this)">
+                <span class="icon">💰</span> Mis Gastos
+            </button>
+            <button class="nav-btn" onclick="mostrarSeccion('analisis', this)">
+                <span class="icon">📈</span> Análisis
+            </button>
+            <button class="nav-btn" onclick="mostrarSeccion('optimizacion', this)">
+                <span class="icon">⚡</span> Optimización
+            </button>
+            <button class="nav-btn" onclick="mostrarSeccion('consejos', this)">
+                <span class="icon">💡</span> Consejos
+            </button>
+        </nav>
+    </div>
+
+    <!-- Overlay para cerrar sidebar en móvil -->
+    <div id="overlay" class="overlay" onclick="toggleMenu()"></div>
+
+    <!-- Contenido Principal -->
+    <div class="contenido">
+        <!-- Dashboard Principal -->
+        <div id="dashboard" class="seccion active">
+            <div class="dashboard-header">
+                <h2>Dashboard Principal</h2>
+                <button class="btn-add" onclick="mostrarAddWidget()">+ Agregar Widget</button>
+            </div>
+            <div id="widgets-container" class="widgets-container">
+                <!-- Los widgets se cargarán dinámicamente aquí -->
+            </div>
+        </div>
+
+        <!-- Sección Usuario -->
+        <div id="usuario" class="seccion">
+            <h2>Perfil de Usuario</h2>
+            <div class="form-group">
+                <label>Nombre:</label>
+                <input id="nombre" type="text" placeholder="Ingresa tu nombre" class="input-field">
+            </div>
+            <div class="form-group">
+                <label>Ingreso Mensual (Bs):</label>
+                <input id="ingreso" type="number" placeholder="Ingresa tu ingreso mensual" class="input-field">
+            </div>
+            <button class="btn-primary" onclick="guardarUsuario()">Guardar Perfil</button>
+            <div id="usuario-info" class="info-box"></div>
+        </div>
+
+        <!-- Sección Mis Gastos -->
+        <div id="gastos" class="seccion">
+            <h2>Registrar Gastos</h2>
+            <div class="form-group">
+                <label>Categoría:</label>
+                <input id="categoria" type="text" placeholder="Ej: Alimentación, Transporte, Entretenimiento" class="input-field">
+            </div>
+            <div class="form-group">
+                <label>Monto (Bs):</label>
+                <input id="monto" type="number" placeholder="Ingresa el monto" class="input-field">
+            </div>
+            <button class="btn-primary" onclick="agregarGasto()">Agregar Gasto</button>
+            
+            <div class="gastos-section">
+                <h3>Historial de Gastos</h3>
+                <div id="lista" class="gastos-list"></div>
+            </div>
+        </div>
+
+        <!-- Sección Análisis -->
+        <div id="analisis" class="seccion">
+            <h2>Análisis de Gastos</h2>
+            <button class="btn-primary" onclick="analizar()">Generar Análisis</button>
+            <div id="resultado" class="resultado-container"></div>
+        </div>
+
+        <!-- Sección Optimización -->
+        <div id="optimizacion" class="seccion">
+            <h2>Optimización de Gastos</h2>
+            <div class="form-group">
+                <label>Selecciona Categoría a Optimizar:</label>
+                <select id="objetivo" class="input-field">
+                    <option value="">-- Selecciona una categoría --</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Presupuesto Total Mensual (Bs):</label>
+                <input id="presupuesto" type="number" placeholder="Ingresa tu presupuesto total" class="input-field">
+            </div>
+            <button class="btn-primary" onclick="optimizar()">Calcular Optimización</button>
+            <div id="optResultado" class="resultado-container"></div>
+        </div>
+
+        <!-- Sección Consejos -->
+        <div id="consejos" class="seccion">
+            <h2>Consejos y Recomendaciones</h2>
+            <button class="btn-primary" onclick="generarConsejos()">Generar Consejos</button>
+            <div id="consejos-container" class="consejos-container"></div>
+        </div>
+    </div>
+
+    <!-- Modal para agregar widgets -->
+    <div id="modal-widget" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModal()">&times;</span>
+            <h3>Agregar Widget</h3>
+            <div class="widget-options">
+                <button class="widget-option" onclick="agregarWidgetDashboard('resumen')">📊 Resumen Total</button>
+                <button class="widget-option" onclick="agregarWidgetDashboard('top-categoria')">🏆 Top Categoría</button>
+                <button class="widget-option" onclick="agregarWidgetDashboard('consejos-rapidos')">💡 Consejos Rápidos</button>
+                <button class="widget-option" onclick="agregarWidgetDashboard('progreso')">⚡ Progreso</button>
+                <button class="widget-option" onclick="agregarWidgetDashboard('grafico')">📈 Gráfico</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
