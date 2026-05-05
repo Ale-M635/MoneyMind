@@ -1,653 +1,801 @@
-// ============ VARIABLES GLOBALES ============
-let historial = [];
-let usuario = {
-    nombre: localStorage.getItem('usuario_nombre') || '',
-    ingreso: parseFloat(localStorage.getItem('usuario_ingreso')) || 0
+/* ============================================================
+   MoneyMind – Script principal
+   Moneda: Bolivianos (Bs.)
+   Persistencia: LocalStorage
+   ============================================================ */
+
+'use strict';
+
+/* ============================================================
+   1. ESTADO GLOBAL
+   ============================================================ */
+const App = {
+  currentUser: null,  // nombre del usuario activo
+  expenses:    [],    // array de gastos del usuario activo
+  income:      { monthly: 0, daily: 0 }, // ingresos del usuario
+  goal:        null,  // meta de ahorro { name, amount, saved }
 };
-let widgets = JSON.parse(localStorage.getItem('widgets')) || [];
 
-// ============ INICIALIZACIÓN ============
-document.addEventListener('DOMContentLoaded', () => {
-    cargarDatos();
-    mostrarSeccion('dashboard');
-    generarConsejosInicial();
-    actualizarSelectCategoria();
-});
+/* Colores para el gráfico de torta (uno por categoría) */
+const PIE_COLORS = [
+  '#2E7D32','#1565C0','#00897B','#E65100','#6A1B9A',
+  '#AD1457','#F9A825','#00838F','#4E342E','#37474F'
+];
 
-// ============ GESTIÓN DE SIDEBAR Y NAVEGACIÓN ============
-function toggleMenu() {
-    const sidebar = document.getElementById('sidebar');
-    const overlay = document.getElementById('overlay');
-    
-    sidebar.classList.toggle('active');
-    overlay.classList.toggle('active');
+/* ============================================================
+   2. HELPERS DE LOCALSTORAGE
+   ============================================================ */
+
+/**
+ * Devuelve el objeto de usuarios guardado en LS.
+ * Estructura: { "usuario": { password, expenses, income, goal } }
+ */
+function getUsers() {
+  return JSON.parse(localStorage.getItem('mm_users') || '{}');
 }
 
-function mostrarSeccion(id, btn) {
-    document.getElementById('sidebar').classList.remove('active');
-    document.getElementById('overlay').classList.remove('active');
-    
-    document.querySelectorAll('.seccion').forEach(sec => {
-        sec.classList.remove('active');
-    });
-    
-    document.getElementById(id).classList.add('active');
-    
-    document.querySelectorAll('.nav-btn').forEach(navBtn => {
-        navBtn.classList.remove('active');
-    });
-    if (btn) btn.classList.add('active');
-    
-    if (id === 'gastos') {
-        actualizarLista();
-    } else if (id === 'dashboard') {
-        generarDashboard();
-    }
+function saveUsers(users) {
+  localStorage.setItem('mm_users', JSON.stringify(users));
 }
 
-// ============ USUARIO ============
-function guardarUsuario() {
-    const nombre = document.getElementById('nombre').value.trim();
-    const ingreso = parseFloat(document.getElementById('ingreso').value);
-    
-    if (!nombre) {
-        alert('Por favor ingresa tu nombre');
-        return;
-    }
-    
-    usuario.nombre = nombre;
-    usuario.ingreso = isNaN(ingreso) ? 0 : ingreso;
-    
-    localStorage.setItem('usuario_nombre', usuario.nombre);
-    localStorage.setItem('usuario_ingreso', usuario.ingreso);
-    
-    mostrarInfoUsuario();
-    alert('Perfil guardado exitosamente');
+/** Carga todos los datos del usuario activo desde LS. */
+function loadUserData() {
+  const users = getUsers();
+  const u = users[App.currentUser];
+  App.expenses = u?.expenses || [];
+  App.income   = u?.income   || { monthly: 0, daily: 0 };
+  App.goal     = u?.goal     || null;
 }
 
-function mostrarInfoUsuario() {
-    const info = document.getElementById('usuario-info');
-    let contenido = '<strong>Perfil Actual:</strong><br>';
-    contenido += `<p>👤 Nombre: <strong>${usuario.nombre || 'No definido'}</strong></p>`;
-    contenido += `<p>💰 Ingreso Mensual: <strong>${usuario.ingreso ? usuario.ingreso + ' Bs' : 'No definido'}</strong></p>`;
-    
-    if (usuario.ingreso > 0) {
-        const totalGastos = obtenerTotalGastos();
-        const porcentajeGastado = (totalGastos / usuario.ingreso * 100).toFixed(1);
-        const disponible = usuario.ingreso - totalGastos;
-        
-        contenido += `<p>📊 Total Gastado: <strong>${totalGastos} Bs (${porcentajeGastado}%)</strong></p>`;
-        contenido += `<p>✅ Disponible: <strong>${disponible} Bs</strong></p>`;
-    }
-    
-    info.innerHTML = contenido;
+/** Persiste todos los datos del usuario activo en LS. */
+function persistUserData() {
+  const users = getUsers();
+  if (users[App.currentUser]) {
+    users[App.currentUser].expenses = App.expenses;
+    users[App.currentUser].income   = App.income;
+    users[App.currentUser].goal     = App.goal;
+    saveUsers(users);
+  }
 }
 
-// ============ GESTIÓN DE GASTOS ============
-function agregarGasto() {
-    const categoria = document.getElementById('categoria').value.trim();
-    const monto = parseFloat(document.getElementById('monto').value);
-    
-    if (!categoria || isNaN(monto) || monto <= 0) {
-        alert('Por favor completa los campos correctamente');
-        return;
-    }
-    
-    const gasto = {
-        id: Date.now(),
-        categoria: categoria,
-        monto: monto,
-        fecha: new Date().toLocaleDateString('es-ES')
-    };
-    
-    historial.push(gasto);
-    guardarDatos();
-    
-    document.getElementById('categoria').value = '';
-    document.getElementById('monto').value = '';
-    
-    actualizarLista();
-    actualizarSelectCategoria();
-    
-    alert(`Gasto registrado: ${categoria} - ${monto} Bs`);
+/* ============================================================
+   3. AUTENTICACIÓN
+   ============================================================ */
+
+function showLogin() {
+  document.getElementById('screen-login').classList.add('active');
+  document.getElementById('screen-app').classList.remove('active');
 }
 
-function actualizarLista() {
-    const lista = document.getElementById('lista');
-    lista.innerHTML = '';
-    
-    if (historial.length === 0) {
-        lista.innerHTML = '<p style="color: #7F8C8D;">No hay gastos registrados</p>';
-        return;
-    }
-    
-    const gastosOrdenados = [...historial].sort((a, b) => b.id - a.id);
-    
-    gastosOrdenados.forEach(gasto => {
-        const div = document.createElement('div');
-        div.className = 'gasto-item';
-        div.innerHTML = `
-            <div class="gasto-info">
-                <span class="gasto-categoria">${gasto.categoria}</span>
-                <span class="gasto-monto">${gasto.monto} Bs</span>
-                <small style="color: #7F8C8D;">${gasto.fecha}</small>
-            </div>
-            <button class="gasto-eliminar" onclick="eliminarGasto(${gasto.id})">Eliminar</button>
-        `;
-        lista.appendChild(div);
-    });
+function showApp() {
+  document.getElementById('screen-login').classList.remove('active');
+  document.getElementById('screen-app').classList.add('active');
+  document.getElementById('topbar-username').textContent = `👤 ${App.currentUser}`;
+  navigateTo('dashboard');
 }
 
-function eliminarGasto(id) {
-    if (confirm('¿Eliminar este gasto?')) {
-        historial = historial.filter(g => g.id !== id);
-        guardarDatos();
-        actualizarLista();
-        actualizarSelectCategoria();
-    }
+function login(username, password) {
+  const users = getUsers();
+  if (!users[username]) return 'Usuario no encontrado.';
+  if (users[username].password !== password) return 'Contraseña incorrecta.';
+  App.currentUser = username;
+  loadUserData();
+  return null;
 }
 
-function obtenerTotalGastos() {
-    return historial.reduce((total, gasto) => total + gasto.monto, 0);
+function register(username, password) {
+  if (!username.trim()) return 'El nombre de usuario no puede estar vacío.';
+  if (password.length < 4) return 'La contraseña debe tener al menos 4 caracteres.';
+  const users = getUsers();
+  if (users[username]) return 'Ese nombre de usuario ya existe.';
+  users[username] = { password, expenses: [], income: { monthly: 0, daily: 0 }, goal: null };
+  saveUsers(users);
+  return null;
 }
 
-// ============ ANÁLISIS ============
-function analizar() {
-    if (historial.length === 0) {
-        document.getElementById('resultado').innerHTML = 
-            '<div class="analisis-card"><p style="color: #7F8C8D;">No hay datos para analizar</p></div>';
-        return;
-    }
-    
-    const hashTable = {};
-    let total = 0;
-    
-    historial.forEach(gasto => {
-        hashTable[gasto.categoria] = (hashTable[gasto.categoria] || 0) + gasto.monto;
-        total += gasto.monto;
-    });
-    
-    const categorias = Object.entries(hashTable)
-        .map(([categoria, monto]) => ({
-            categoria,
-            monto,
-            porcentaje: (monto / total * 100).toFixed(1)
-        }))
-        .sort((a, b) => b.monto - a.monto);
-    
-    const categoriaMaxima = categorias[0];
-    
-    let html = `
-        <div class="analisis-card">
-            <div class="analisis-total">Total: ${total.toFixed(2)} Bs</div>
-            <p style="color: #7F8C8D; margin-bottom: 20px;">Gastos agrupados por categoría</p>
-    `;
-    
-    categorias.forEach(cat => {
-        const isMax = cat.categoria === categoriaMaxima.categoria;
-        html += `
-            <div class="categoria-item" style="${isMax ? 'background: rgba(108, 99, 255, 0.05); padding: 12px; border-radius: 8px; margin: 5px 0;' : ''}">
-                <div style="flex: 1;">
-                    <div class="categoria-nombre">${isMax ? '🔥 ' : ''}${cat.categoria}${isMax ? ' (Mayor gasto)' : ''}</div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" style="width: ${cat.porcentaje}%"></div>
-                    </div>
-                </div>
-                <div class="categoria-datos">
-                    <span class="categoria-monto">${cat.monto.toFixed(2)} Bs</span>
-                    <span class="categoria-porcentaje">${cat.porcentaje}%</span>
-                </div>
-            </div>
-        `;
-    });
-    
-    html += '</div>';
-    document.getElementById('resultado').innerHTML = html;
+/* ============================================================
+   4. GESTIÓN DE GASTOS
+   ============================================================ */
+
+function addExpense(expense) {
+  expense.id = Date.now().toString();
+  App.expenses.unshift(expense);
+  persistUserData();
 }
 
-// ============ OPTIMIZACIÓN ============
-function optimizar() {
-    const categoria = document.getElementById('objetivo').value.trim();
-    const presupuesto = parseFloat(document.getElementById('presupuesto').value);
-    
-    if (!categoria || isNaN(presupuesto) || presupuesto <= 0) {
-        alert('Por favor selecciona una categoría y un presupuesto válido');
-        return;
-    }
-    
-    if (historial.length === 0) {
-        alert('No hay gastos registrados para optimizar');
-        return;
-    }
-    
-    const gastoActual = historial
-        .filter(g => g.categoria === categoria)
-        .reduce((total, g) => total + g.monto, 0);
-    
-    if (gastoActual === 0) {
-        alert(`No hay gastos en la categoría: ${categoria}`);
-        return;
-    }
-    
-    const total = obtenerTotalGastos();
-    const valorIdeal = presupuesto * 0.35;
-    const diferencia = gastoActual - valorIdeal;
-    const porcentajeDiferencia = (diferencia / valorIdeal * 100).toFixed(1);
-    
-    let nivel = 'Bajo';
-    let color = '#1DD1A1';
-    if (Math.abs(porcentajeDiferencia) > 50) {
-        nivel = 'Alto';
-        color = '#EE5A6F';
-    } else if (Math.abs(porcentajeDiferencia) > 20) {
-        nivel = 'Medio';
-        color = '#FFA502';
-    }
-    
-    let html = `
-        <div class="analisis-card">
-            <div style="border-bottom: 2px solid var(--border-color); padding-bottom: 15px; margin-bottom: 15px;">
-                <h3 style="margin: 0 0 10px 0;">📊 Optimización: ${categoria}</h3>
-            </div>
-            
-            <div style="display: grid; gap: 15px;">
-                <div style="background: rgba(108, 99, 255, 0.1); padding: 15px; border-radius: 8px;">
-                    <p style="margin: 0 0 5px 0; color: #7F8C8D; font-size: 13px;">Gasto Actual</p>
-                    <p style="margin: 0; font-size: 24px; font-weight: 700; color: var(--primary-color);">${gastoActual.toFixed(2)} Bs</p>
-                </div>
-                
-                <div style="background: rgba(29, 209, 161, 0.1); padding: 15px; border-radius: 8px;">
-                    <p style="margin: 0 0 5px 0; color: #7F8C8D; font-size: 13px;">Valor Ideal (35% de presupuesto)</p>
-                    <p style="margin: 0; font-size: 24px; font-weight: 700; color: var(--success-color);">${valorIdeal.toFixed(2)} Bs</p>
-                </div>
-                
-                <div style="background: rgba(255, 165, 2, 0.1); padding: 15px; border-radius: 8px;">
-                    <p style="margin: 0 0 5px 0; color: #7F8C8D; font-size: 13px;">Diferencia</p>
-                    <p style="margin: 0; font-size: 24px; font-weight: 700; color: ${color};">
-                        ${diferencia > 0 ? '+' : ''}${diferencia.toFixed(2)} Bs (${porcentajeDiferencia}%)
-                    </p>
-                </div>
-                
-                <div style="background: ${color}20; padding: 15px; border-left: 4px solid ${color}; border-radius: 8px;">
-                    <p style="margin: 0 0 5px 0; color: #7F8C8D; font-size: 13px;">Nivel de Enfoque</p>
-                    <p style="margin: 0; font-size: 20px; font-weight: 700; color: ${color};">${nivel}</p>
-                </div>
-                
-                <div style="background: var(--light-bg); padding: 15px; border-radius: 8px;">
-                    <p style="margin: 0; color: var(--text-secondary); font-size: 14px;">
-                        ${diferencia > 0 
-                            ? `⚠️ Estás gastando <strong>${Math.abs(diferencia.toFixed(2))} Bs más</strong> de lo ideal. Considera reducir gastos en esta categoría.`
-                            : `✅ Estás gastando <strong>${Math.abs(diferencia.toFixed(2))} Bs menos</strong> de lo ideal. Buen control presupuestario.`
-                        }
-                    </p>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    document.getElementById('optResultado').innerHTML = html;
+function deleteExpense(id) {
+  App.expenses = App.expenses.filter(e => e.id !== id);
+  persistUserData();
 }
 
-function actualizarSelectCategoria() {
-    const select = document.getElementById('objetivo');
-    const categoriasUnicas = [...new Set(historial.map(g => g.categoria))];
-    
-    select.innerHTML = '<option value="">-- Selecciona una categoría --</option>';
-    categoriasUnicas.forEach(cat => {
-        const option = document.createElement('option');
-        option.value = cat;
-        option.textContent = cat;
-        select.appendChild(option);
-    });
+function clearExpenses() {
+  App.expenses = [];
+  persistUserData();
 }
 
-// ============ CONSEJOS ============
-function generarConsejos() {
-    if (historial.length === 0) {
-        document.getElementById('consejos-container').innerHTML = 
-            '<p style="color: #7F8C8D;">Registra gastos para recibir consejos</p>';
-        return;
-    }
-    
-    const consejos = obtenerConsejos();
-    renderizarConsejos(consejos);
+/* ============================================================
+   5. CÁLCULOS
+   ============================================================ */
+
+function totalExpenses() {
+  return App.expenses.reduce((sum, e) => sum + e.amount, 0);
 }
 
-function generarConsejosInicial() {
-    const consejos = obtenerConsejos();
-    if (consejos.length > 0) {
-        renderizarConsejos(consejos);
-    }
+/** Devuelve { categoria: total } ordenado de mayor a menor. */
+function expensesByCategory() {
+  const map = {};
+  App.expenses.forEach(e => {
+    map[e.category] = (map[e.category] || 0) + e.amount;
+  });
+  return Object.fromEntries(Object.entries(map).sort((a, b) => b[1] - a[1]));
 }
 
-function obtenerConsejos() {
-    const consejos = [];
-    
-    if (historial.length === 0) {
-        consejos.push({
-            titulo: '📝 Comienza a registrar',
-            texto: 'Registra tus gastos para obtener análisis y recomendaciones personalizadas.',
-            tipo: 'info'
-        });
-        return consejos;
-    }
-    
-    const hashTable = {};
-    let total = 0;
-    
-    historial.forEach(gasto => {
-        hashTable[gasto.categoria] = (hashTable[gasto.categoria] || 0) + gasto.monto;
-        total += gasto.monto;
-    });
-    
-    for (let categoria in hashTable) {
-        const monto = hashTable[categoria];
-        const porcentaje = (monto / total * 100);
-        
-        if (porcentaje > 40) {
-            consejos.push({
-                titulo: `⚠️ ${categoria} muy alto`,
-                texto: `Tu gasto en ${categoria} representa el ${porcentaje.toFixed(1)}% de tus gastos totales. Considera reducir este gasto para mejorar tu situación financiera.`,
-                tipo: 'danger'
-            });
-        } else if (porcentaje < 10) {
-            consejos.push({
-                titulo: `💡 Invertir en ${categoria}`,
-                texto: `Inviertes poco en ${categoria} (${porcentaje.toFixed(1)}%). Considera si necesitas aumentar la inversión en esta área.`,
-                tipo: 'warning'
-            });
-        }
-    }
-    
-    if (usuario.ingreso > 0) {
-        const totalGastos = obtenerTotalGastos();
-        const ahorro = usuario.ingreso - totalGastos;
-        
-        if (ahorro <= 0) {
-            consejos.push({
-                titulo: '💰 Sin ahorro',
-                texto: 'No tienes ahorro disponible. Intenta reducir gastos para reservar dinero para emergencias o inversiones.',
-                tipo: 'danger'
-            });
-        } else if (ahorro < usuario.ingreso * 0.1) {
-            consejos.push({
-                titulo: '🎯 Aumenta tu ahorro',
-                texto: `Ahorras solo el ${(ahorro / usuario.ingreso * 100).toFixed(1)}% de tu ingreso. Intenta llegar al 20% para mayor estabilidad.`,
-                tipo: 'warning'
-            });
-        } else {
-            consejos.push({
-                titulo: '✅ Excelente ahorro',
-                texto: `Ahorras el ${(ahorro / usuario.ingreso * 100).toFixed(1)}% de tu ingreso. ¡Muy bien! Mantén esta disciplina.`,
-                tipo: 'success'
-            });
-        }
-    }
-    
-    return consejos;
+function topCategory() {
+  const keys = Object.keys(expensesByCategory());
+  return keys.length ? keys[0] : null;
 }
 
-function renderizarConsejos(consejos) {
-    const container = document.getElementById('consejos-container');
-    container.innerHTML = '';
-    
-    consejos.forEach(consejo => {
-        const div = document.createElement('div');
-        div.className = `consejo-item ${consejo.tipo}`;
-        div.innerHTML = `
-            <div class="consejo-title">${consejo.titulo}</div>
-            <div class="consejo-text">${consejo.texto}</div>
-        `;
-        container.appendChild(div);
-    });
+function estimatedSaving() {
+  return totalExpenses() * 0.20;
 }
 
-// ============ DASHBOARD Y WIDGETS ============
-function mostrarAddWidget() {
-    document.getElementById('modal-widget').classList.add('active');
+function expensesThisMonth() {
+  const now = new Date();
+  return App.expenses.filter(e => {
+    const d = new Date(e.date + 'T00:00:00');
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  });
 }
 
-function cerrarModal() {
-    document.getElementById('modal-widget').classList.remove('active');
+/** Saldo disponible = ingreso mensual - total gastado */
+function availableBalance() {
+  return App.income.monthly - totalExpenses();
 }
 
-function agregarWidgetDashboard(tipo) {
-    const nuevoWidget = {
-        id: Date.now(),
-        tipo: tipo
-    };
-    
-    widgets.push(nuevoWidget);
-    guardarDatos();
-    cerrarModal();
-    generarDashboard();
+/* ============================================================
+   6. RENDERIZADO – DASHBOARD
+   ============================================================ */
+
+function renderDashboard() {
+  const total   = totalExpenses();
+  const balance = availableBalance();
+  const goalPct = App.goal && App.goal.amount > 0
+    ? Math.min(100, Math.round((App.goal.saved / App.goal.amount) * 100))
+    : 0;
+
+  // Tarjetas
+  document.getElementById('stat-total').textContent    = formatBs(total);
+  document.getElementById('stat-income').textContent   = formatBs(App.income.monthly);
+  document.getElementById('stat-balance').textContent  = formatBs(balance);
+  document.getElementById('stat-goal-pct').textContent = App.goal ? `${goalPct}%` : '–';
+
+  // Colorear saldo según estado
+  const balEl = document.getElementById('stat-balance');
+  balEl.style.color = balance < 0 ? 'var(--red)' : balance < App.income.monthly * 0.1 ? 'var(--orange)' : 'var(--green-dark)';
+
+  // Saludo dinámico
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? '☀️ Buenos días' : hour < 18 ? '🌤️ Buenas tardes' : '🌙 Buenas noches';
+  document.getElementById('dashboard-greeting').textContent = `${greeting}, ${App.currentUser}`;
+
+  renderPieChart();
+  renderBarChart();
+  renderRecentExpenses();
 }
 
-function removerWidgetDashboard(id) {
-    widgets = widgets.filter(w => w.id !== id);
-    guardarDatos();
-    generarDashboard();
-}
+/* ---- Gráfico de torta SVG ---- */
+function renderPieChart() {
+  const svg    = document.getElementById('pie-chart');
+  const legend = document.getElementById('pie-legend');
+  const empty  = document.getElementById('pie-empty');
+  const cats   = expensesByCategory();
+  const keys   = Object.keys(cats);
+  const total  = totalExpenses();
 
-function generarDashboard() {
-    const container = document.getElementById('widgets-container');
-    container.innerHTML = '';
-    
-    if (widgets.length === 0) {
-        container.innerHTML = `
-            <div style="grid-column: 1/-1; text-align: center; padding: 40px; background: var(--card-bg); border-radius: 12px; box-shadow: var(--shadow);">
-                <p style="font-size: 18px; color: var(--text-secondary);">No hay widgets en el dashboard</p>
-                <p style="color: #7F8C8D;">Haz clic en "+ Agregar Widget" para empezar</p>
-            </div>
-        `;
-        return;
-    }
-    
-    widgets.forEach(widget => {
-        const div = document.createElement('div');
-        div.className = 'widget';
-        
-        let contenido = '';
-        
-        switch(widget.tipo) {
-            case 'resumen':
-                contenido = generarWidgetResumen();
-                break;
-            case 'top-categoria':
-                contenido = generarWidgetTopCategoria();
-                break;
-            case 'consejos-rapidos':
-                contenido = generarWidgetConsejosRapidos();
-                break;
-            case 'progreso':
-                contenido = generarWidgetProgreso();
-                break;
-            case 'grafico':
-                contenido = generarWidgetGrafico();
-                break;
-        }
-        
-        div.innerHTML = `
-            <div class="widget-header">
-                <span class="widget-title">${contenido.titulo}</span>
-                <button class="widget-remove" onclick="removerWidgetDashboard(${widget.id})">✕</button>
-            </div>
-            <div class="widget-content">
-                ${contenido.html}
-            </div>
-        `;
-        
-        container.appendChild(div);
-    });
-}
+  if (!keys.length) {
+    svg.innerHTML = '';
+    legend.innerHTML = '';
+    empty.style.display = 'block';
+    svg.style.display = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+  svg.style.display = 'block';
 
-function generarWidgetResumen() {
-    const total = obtenerTotalGastos();
-    const numGastos = historial.length;
-    const promedio = numGastos > 0 ? (total / numGastos).toFixed(2) : 0;
-    
-    return {
-        titulo: '📊 Resumen Total',
-        html: `
-            <div class="widget-value">${total.toFixed(2)} Bs</div>
-            <div class="widget-description">Total en ${numGastos} gasto${numGastos !== 1 ? 's' : ''}</div>
-            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-color); color: #7F8C8D; font-size: 12px;">
-                Promedio: ${promedio} Bs por gasto
-            </div>
-        `
-    };
-}
+  const cx = 100, cy = 100, r = 80;
+  let startAngle = -Math.PI / 2; // empezar desde arriba
+  let slices = '';
 
-function generarWidgetTopCategoria() {
-    if (historial.length === 0) {
-        return {
-            titulo: '🏆 Top Categoría',
-            html: '<p style="color: #7F8C8D;">Sin datos</p>'
-        };
-    }
-    
-    const hashTable = {};
-    historial.forEach(gasto => {
-        hashTable[gasto.categoria] = (hashTable[gasto.categoria] || 0) + gasto.monto;
-    });
-    
-    const topCategoria = Object.entries(hashTable).sort((a, b) => b[1] - a[1])[0];
-    const total = obtenerTotalGastos();
-    const porcentaje = (topCategoria[1] / total * 100).toFixed(1);
-    
-    return {
-        titulo: '🏆 Top Categoría',
-        html: `
-            <div style="font-size: 16px; font-weight: 600; color: var(--primary-color);">${topCategoria[0]}</div>
-            <div class="widget-value">${topCategoria[1].toFixed(2)} Bs</div>
-            <div class="widget-description">${porcentaje}% del total</div>
-        `
-    };
-}
+  keys.forEach((cat, i) => {
+    const pct   = cats[cat] / total;
+    const angle = pct * 2 * Math.PI;
+    const endAngle = startAngle + angle;
+    const largeArc = angle > Math.PI ? 1 : 0;
+    const color = PIE_COLORS[i % PIE_COLORS.length];
 
-function generarWidgetConsejosRapidos() {
-    const consejos = obtenerConsejos();
-    let html = '';
-    
-    if (consejos.length === 0) {
-        html = '<p style="color: #7F8C8D;">Sin recomendaciones</p>';
+    const x1 = cx + r * Math.cos(startAngle);
+    const y1 = cy + r * Math.sin(startAngle);
+    const x2 = cx + r * Math.cos(endAngle);
+    const y2 = cy + r * Math.sin(endAngle);
+
+    // Si es 100% dibujamos un círculo completo
+    if (pct >= 0.9999) {
+      slices += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" class="pie-slice"><title>${cat}: ${formatBs(cats[cat])}</title></circle>`;
     } else {
-        html = consejos.slice(0, 2).map(c => `
-            <div style="margin-bottom: 12px; padding: 8px; background: ${c.tipo === 'success' ? 'rgba(29, 209, 161, 0.1)' : 'rgba(255, 165, 2, 0.1)'}; border-radius: 6px;">
-                <div style="font-weight: 600; font-size: 12px; margin-bottom: 4px;">${c.titulo}</div>
-                <div style="font-size: 11px; color: #7F8C8D; line-height: 1.4;">${c.texto.substring(0, 80)}...</div>
-            </div>
-        `).join('');
+      slices += `<path d="M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 ${largeArc},1 ${x2.toFixed(2)},${y2.toFixed(2)} Z" fill="${color}" class="pie-slice"><title>${cat}: ${formatBs(cats[cat])}</title></path>`;
     }
-    
-    return {
-        titulo: '💡 Consejos Rápidos',
-        html: html
-    };
+    startAngle = endAngle;
+  });
+
+  // Círculo interior (efecto donut)
+  slices += `<circle cx="${cx}" cy="${cy}" r="44" fill="var(--surface)"/>`;
+  // Texto central
+  slices += `<text x="${cx}" y="${cy - 6}" text-anchor="middle" font-size="11" fill="var(--text-secondary)" font-family="Inter,sans-serif">Total</text>`;
+  slices += `<text x="${cx}" y="${cy + 12}" text-anchor="middle" font-size="10" font-weight="700" fill="var(--text-primary)" font-family="Inter,sans-serif">${formatBs(total)}</text>`;
+
+  svg.innerHTML = slices;
+
+  // Leyenda
+  legend.innerHTML = keys.map((cat, i) => {
+    const pct = total > 0 ? ((cats[cat] / total) * 100).toFixed(1) : 0;
+    return `<div class="pie-legend-item">
+      <span class="pie-dot" style="background:${PIE_COLORS[i % PIE_COLORS.length]}"></span>
+      <span>${getCategoryEmoji(cat)} ${cat} <strong>${pct}%</strong></span>
+    </div>`;
+  }).join('');
 }
 
-function generarWidgetProgreso() {
-    if (usuario.ingreso <= 0) {
-        return {
-            titulo: '⚡ Progreso',
-            html: '<p style="color: #7F8C8D;">Define tu ingreso en el perfil</p>'
-        };
-    }
-    
-    const total = obtenerTotalGastos();
-    const porcentaje = Math.min((total / usuario.ingreso * 100).toFixed(1), 100);
-    const disponible = usuario.ingreso - total;
-    
-    return {
-        titulo: '⚡ Progreso',
-        html: `
-            <div style="margin-bottom: 10px;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px;">
-                    <span>Gastado</span>
-                    <span>${porcentaje}%</span>
-                </div>
-                <div class="progress-bar" style="height: 10px;">
-                    <div class="progress-fill" style="width: ${porcentaje}%"></div>
-                </div>
-            </div>
-            <div style="color: #7F8C8D; font-size: 12px;">
-                <p style="margin: 8px 0;">💰 ${total.toFixed(2)} / ${usuario.ingreso} Bs</p>
-                <p style="margin: 0; color: var(--success-color); font-weight: 600;">✓ Disponible: ${disponible.toFixed(2)} Bs</p>
-            </div>
-        `
-    };
+/** Gráfico de barras CSS por categoría. */
+function renderBarChart() {
+  const container = document.getElementById('bar-chart');
+  const cats = expensesByCategory();
+  const keys = Object.keys(cats);
+
+  if (!keys.length) {
+    container.innerHTML = '<p class="empty-msg">Sin datos aún.</p>';
+    return;
+  }
+  const maxVal = cats[keys[0]];
+  container.innerHTML = keys.map(cat => {
+    const pct = maxVal > 0 ? (cats[cat] / maxVal) * 100 : 0;
+    return `<div class="bar-row">
+      <span class="bar-label">${getCategoryEmoji(cat)} ${cat}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+      <span class="bar-amount">${formatBs(cats[cat])}</span>
+    </div>`;
+  }).join('');
 }
 
-function generarWidgetGrafico() {
-    if (historial.length === 0) {
-        return {
-            titulo: '📈 Gráfico',
-            html: '<p style="color: #7F8C8D;">Sin datos para mostrar</p>'
-        };
-    }
-    
-    const hashTable = {};
-    historial.forEach(gasto => {
-        hashTable[gasto.categoria] = (hashTable[gasto.categoria] || 0) + gasto.monto;
+/** Últimos 5 gastos en el dashboard. */
+function renderRecentExpenses() {
+  const list  = document.getElementById('recent-list');
+  const empty = document.getElementById('recent-empty');
+  const last5 = App.expenses.slice(0, 5);
+
+  if (!last5.length) {
+    list.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  list.innerHTML = last5.map(e => `
+    <li class="recent-item">
+      <div class="recent-item-left">
+        <span class="recent-cat-icon">${getCategoryEmoji(e.category)}</span>
+        <div>
+          <div class="recent-desc">${escapeHtml(e.description || e.category)}</div>
+          <div class="recent-cat">${e.category} · ${formatDate(e.date)}</div>
+        </div>
+      </div>
+      <span class="recent-amount">${formatBs(e.amount)}</span>
+    </li>`).join('');
+}
+
+/* ============================================================
+   7. RENDERIZADO – HISTORIAL
+   ============================================================ */
+
+function renderHistory() {
+  const list    = document.getElementById('expense-list');
+  const empty   = document.getElementById('history-empty');
+  const sortVal = document.getElementById('sort-select').value;
+  let sorted    = [...App.expenses];
+
+  switch (sortVal) {
+    case 'date-desc':   sorted.sort((a, b) => new Date(b.date) - new Date(a.date)); break;
+    case 'date-asc':    sorted.sort((a, b) => new Date(a.date) - new Date(b.date)); break;
+    case 'amount-desc': sorted.sort((a, b) => b.amount - a.amount); break;
+    case 'amount-asc':  sorted.sort((a, b) => a.amount - b.amount); break;
+  }
+
+  if (!sorted.length) {
+    list.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  list.innerHTML = sorted.map(e => `
+    <li class="expense-item" data-id="${e.id}">
+      <div class="expense-item-left">
+        <span class="expense-emoji">${getCategoryEmoji(e.category)}</span>
+        <div class="expense-info">
+          <div class="expense-desc">${escapeHtml(e.description || '(sin descripción)')}</div>
+          <div class="expense-meta">${e.category} · ${formatDate(e.date)}</div>
+        </div>
+      </div>
+      <div class="expense-item-right">
+        <span class="expense-amount">${formatBs(e.amount)}</span>
+        <button class="btn-delete" data-id="${e.id}" title="Eliminar" aria-label="Eliminar gasto">🗑️</button>
+      </div>
+    </li>`).join('');
+}
+
+/* ============================================================
+   8. RENDERIZADO – FINANZAS (ingresos + meta de ahorro)
+   ============================================================ */
+
+function renderFinances() {
+  const monthly = App.income.monthly;
+  const daily   = App.income.daily;
+
+  // Rellenar campos del formulario con valores guardados
+  if (monthly > 0) document.getElementById('income-monthly').value = monthly;
+  if (daily   > 0) document.getElementById('income-daily').value   = daily;
+
+  // Resumen ingreso vs gasto
+  const total   = totalExpenses();
+  const balance = availableBalance();
+  document.getElementById('sum-income').textContent  = formatBs(monthly);
+  document.getElementById('sum-spent').textContent   = formatBs(total);
+  const balEl = document.getElementById('sum-balance');
+  balEl.textContent  = formatBs(balance);
+  balEl.style.color  = balance < 0 ? 'var(--red)' : 'var(--green-dark)';
+
+  // Barra de progreso gasto/ingreso
+  const fill    = document.getElementById('spend-bar-fill');
+  const pctEl   = document.getElementById('spend-bar-pct');
+  const msgEl   = document.getElementById('spend-bar-msg');
+  const spendPct = monthly > 0 ? Math.min(100, (total / monthly) * 100) : 0;
+  fill.style.width = `${spendPct}%`;
+  pctEl.textContent = `${spendPct.toFixed(0)}%`;
+  fill.className = 'spend-bar-fill';
+  if (spendPct >= 100) {
+    fill.classList.add('danger');
+    msgEl.textContent = '⚠️ Has superado tu ingreso mensual.';
+  } else if (spendPct >= 80) {
+    fill.classList.add('warning');
+    msgEl.textContent = '⚡ Estás cerca del límite de tu ingreso.';
+  } else {
+    msgEl.textContent = '✅ Tus gastos están dentro del rango saludable.';
+  }
+
+  // Regla 50/30/20
+  renderRuleBreakdown(monthly);
+
+  // Meta de ahorro
+  renderGoalProgress();
+}
+
+/**
+ * Muestra la distribución recomendada 50/30/20 del ingreso mensual.
+ * 50% necesidades, 30% deseos, 20% ahorro.
+ */
+function renderRuleBreakdown(monthly) {
+  const ruleEl  = document.getElementById('rule-breakdown');
+  const emptyEl = document.getElementById('rule-empty');
+
+  if (!monthly) {
+    ruleEl.innerHTML = '';
+    emptyEl.style.display = 'block';
+    return;
+  }
+  emptyEl.style.display = 'none';
+
+  const rules = [
+    { label: '🏠 Necesidades (50%)', pct: 50, cls: 'rule-fill-needs',   desc: 'Vivienda, alimentación, salud, transporte básico' },
+    { label: '🎮 Deseos (30%)',       pct: 30, cls: 'rule-fill-wants',   desc: 'Ocio, ropa, tecnología, salidas' },
+    { label: '🐷 Ahorro (20%)',       pct: 20, cls: 'rule-fill-savings', desc: 'Fondo de emergencia, metas, inversión' },
+  ];
+
+  ruleEl.innerHTML = rules.map(r => {
+    const amount = (monthly * r.pct) / 100;
+    return `<div class="rule-item">
+      <span class="rule-label" title="${r.desc}">${r.label}</span>
+      <div class="rule-track"><div class="rule-fill ${r.cls}" style="width:${r.pct}%"></div></div>
+      <span class="rule-amount">${formatBs(amount)}</span>
+    </div>`;
+  }).join('');
+}
+
+/** Renderiza el progreso de la meta de ahorro. */
+function renderGoalProgress() {
+  const prog = document.getElementById('goal-progress');
+
+  if (!App.goal || !App.goal.amount) {
+    prog.style.display = 'none';
+    return;
+  }
+
+  const { name, amount, saved } = App.goal;
+  const pct = Math.min(100, Math.round((saved / amount) * 100));
+  const remaining = Math.max(0, amount - saved);
+
+  // Estimar meses para alcanzar la meta (basado en ahorro mensual 20%)
+  const monthlySaving = App.income.monthly * 0.20;
+  const monthsNeeded  = monthlySaving > 0 ? Math.ceil(remaining / monthlySaving) : null;
+
+  document.getElementById('goal-title').textContent      = `🎯 ${escapeHtml(name)}`;
+  document.getElementById('goal-pct-label').textContent  = `${pct}%`;
+  document.getElementById('goal-fill').style.width       = `${pct}%`;
+  document.getElementById('goal-saved-label').textContent  = `Ahorrado: ${formatBs(saved)}`;
+  document.getElementById('goal-target-label').textContent = `Meta: ${formatBs(amount)}`;
+  document.getElementById('goal-months-msg').textContent   = monthsNeeded
+    ? `A este ritmo (20% de tu ingreso = ${formatBs(monthlySaving)}/mes), alcanzarás tu meta en ~${monthsNeeded} mes${monthsNeeded !== 1 ? 'es' : ''}.`
+    : 'Ingresa tu ingreso mensual para estimar el tiempo.';
+
+  prog.style.display = 'block';
+}
+
+/** Genera el análisis automático y sugerencias. */
+function renderAnalysis() {
+  const cats      = expensesByCategory();
+  const keys      = Object.keys(cats);
+  const total     = totalExpenses();
+  const alertEl   = document.getElementById('analysis-alert');
+  const breakEl   = document.getElementById('breakdown-list');
+  const suggEl    = document.getElementById('suggestions-list');
+  const suggEmpty = document.getElementById('suggestions-empty');
+  const tipsCat   = document.getElementById('tips-category').value;
+
+  if (!keys.length) {
+    alertEl.className   = 'analysis-alert';
+    alertEl.textContent = '📊 Aún no hay gastos para analizar. Empieza registrando tus movimientos.';
+    breakEl.innerHTML   = '';
+    suggEl.innerHTML    = '';
+    suggEmpty.style.display = 'block';
+    return;
+  }
+
+  const topCat = keys[0];
+  const topPct = total > 0 ? (cats[topCat] / total) * 100 : 0;
+
+  if (topPct > 50) {
+    alertEl.className = 'analysis-alert warning';
+    alertEl.innerHTML = `⚠️ <strong>Atención:</strong> Estás gastando mucho en <strong>${topCat}</strong>. Representa el <strong>${topPct.toFixed(0)}%</strong> de tus gastos totales.`;
+  } else {
+    alertEl.className = 'analysis-alert';
+    alertEl.innerHTML = `✅ Tu categoría con mayor gasto es <strong>${topCat}</strong> (${topPct.toFixed(0)}% del total). Vas bien.`;
+  }
+
+  // Desglose por categoría
+  breakEl.innerHTML = keys.map(cat => {
+    const pct = total > 0 ? (cats[cat] / total) * 100 : 0;
+    return `<div class="breakdown-item">
+      <div class="breakdown-bar-wrap">
+        <span class="breakdown-cat">${getCategoryEmoji(cat)} ${cat}</span>
+        <div class="breakdown-track"><div class="breakdown-fill" style="width:${pct}%"></div></div>
+      </div>
+      <span class="breakdown-pct">${pct.toFixed(1)}%</span>
+    </div>`;
+  }).join('');
+
+  // Consejos según filtro
+  const tips = getTips(tipsCat, cats, total);
+  if (!tips.length) {
+    suggEl.innerHTML = '';
+    suggEmpty.style.display = 'block';
+  } else {
+    suggEmpty.style.display = 'none';
+    suggEl.innerHTML = tips.map(t => `<li class="suggestion-item">${t}</li>`).join('');
+  }
+}
+
+/**
+ * Banco de consejos por categoría.
+ */
+function getTips(filter, cats, total) {
+  const allTips = {
+    general: [
+      `📐 Aplica la regla 50/30/20: 50% necesidades, 30% deseos, 20% ahorro.`,
+      `🐷 Automatiza tu ahorro: transfiere el 20% de tu ingreso apenas lo recibas.`,
+      `📋 Revisa tus gastos cada semana para detectar patrones antes de que se acumulen.`,
+      `🎯 Tener una meta concreta (nombre + monto) multiplica la motivación para ahorrar.`,
+      `💳 Evita compras impulsivas esperando 48 horas antes de decidir.`,
+      `📊 Compara tus gastos del mes actual con el anterior para ver si mejoras.`,
+      total > 0 ? `🐷 Reducir tus gastos un 20% te ahorraría <strong>${formatBs(estimatedSaving())}</strong> en este período.` : null,
+    ].filter(Boolean),
+    'Alimentación': [
+      `🍳 Cocinar en casa puede reducir este gasto hasta un 50% vs comer fuera.`,
+      `📝 Planifica el menú semanal y haz una sola compra grande en lugar de varias pequeñas.`,
+      `🛒 Compra en mercados locales o ferias; suelen ser más baratos que supermercados.`,
+      `🥦 Prioriza alimentos de temporada: son más baratos y nutritivos.`,
+      `📦 Compra al por mayor productos no perecederos (arroz, fideo, aceite) para ahorrar.`,
+      `🍱 Lleva almuerzo al trabajo o estudio: ahorras entre Bs. 15–30 por día.`,
+    ],
+    'Transporte': [
+      `🚌 Usa transporte público siempre que sea posible; es hasta 5x más barato.`,
+      `🚶 Para distancias menores a 15 minutos, caminar ahorra dinero y mejora tu salud.`,
+      `🤝 Organiza carpooling con compañeros de trabajo o estudio.`,
+      `🛵 Evalúa si una bicicleta o moto pequeña es más económica a largo plazo.`,
+      `📍 Agrupa tus diligencias en una sola salida para reducir viajes.`,
+    ],
+    'Ocio': [
+      `🎬 Busca actividades gratuitas: parques, eventos culturales, bibliotecas.`,
+      `📺 Comparte suscripciones de streaming con familiares o amigos.`,
+      `🎮 Aprovecha juegos gratuitos o de código abierto antes de comprar.`,
+      `🎟️ Compra entradas con anticipación; suelen tener descuentos del 20–40%.`,
+      `📚 Las bibliotecas públicas ofrecen libros, películas y cursos sin costo.`,
+    ],
+    'Salud': [
+      `💊 Consulta si existen genéricos de tus medicamentos; son igual de efectivos y más baratos.`,
+      `🏃 Invertir en hábitos saludables reduce gastos médicos futuros.`,
+      `🏥 Usa el sistema público de salud para consultas de rutina.`,
+      `🦷 La prevención dental es más barata que el tratamiento; visita al dentista cada 6 meses.`,
+    ],
+    'Educación': [
+      `🎓 Busca becas, descuentos por pago anticipado o planes de financiamiento.`,
+      `💻 YouTube, Coursera o Khan Academy ofrecen cursos gratuitos de calidad.`,
+      `📚 Comparte libros de texto con compañeros o búscalos en versión digital.`,
+      `🤝 Grupos de estudio reducen la necesidad de clases particulares.`,
+    ],
+    'Ropa': [
+      `🛍️ Compra en temporada baja (enero y julio) cuando hay liquidaciones de hasta 70%.`,
+      `👗 Prioriza prendas versátiles que combinen con varias outfits.`,
+      `♻️ Considera ropa de segunda mano; hay piezas en excelente estado a bajo precio.`,
+      `📋 Haz una lista de lo que realmente necesitas antes de ir de compras.`,
+    ],
+    'Hogar': [
+      `💡 Desconecta aparatos en standby; pueden representar hasta el 10% de tu factura eléctrica.`,
+      `🚿 Duchas cortas y grifos cerrados al cepillarte reducen la factura de agua.`,
+      `🔧 Aprende reparaciones básicas para evitar técnicos.`,
+      `🛒 Compara precios de servicios (internet, cable) y negocia o cambia de proveedor.`,
+    ],
+    'Tecnología': [
+      `📱 Antes de comprar un gadget nuevo, evalúa si realmente lo necesitas.`,
+      `🔄 Vende o intercambia dispositivos viejos antes de comprar nuevos.`,
+      `☁️ Revisa tus suscripciones digitales; cancela las que no uses activamente.`,
+      `🛒 Espera el Black Friday o fechas de descuento para compras tecnológicas grandes.`,
+    ],
+  };
+
+  if (filter !== 'general' && allTips[filter]) {
+    return [...allTips[filter], ...allTips.general.slice(0, 2)];
+  }
+  const topCat = Object.keys(cats)[0];
+  const extra  = topCat && allTips[topCat] ? [allTips[topCat][0]] : [];
+  return [...allTips.general, ...extra];
+}
+
+/* ============================================================
+   10. NAVEGACIÓN
+   ============================================================ */
+
+function navigateTo(viewName) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`view-${viewName}`)?.classList.add('active');
+  document.querySelector(`.nav-btn[data-view="${viewName}"]`)?.classList.add('active');
+
+  switch (viewName) {
+    case 'dashboard': renderDashboard(); break;
+    case 'history':   renderHistory();   break;
+    case 'finances':  renderFinances();  break;
+    case 'analysis':  renderAnalysis();  break;
+  }
+}
+
+/* ============================================================
+   11. MODO OSCURO
+   ============================================================ */
+
+function toggleDarkMode() {
+  const isDark = document.body.classList.toggle('dark-mode');
+  document.body.classList.toggle('light-mode', !isDark);
+  document.getElementById('btn-dark-mode').textContent = isDark ? '☀️' : '🌙';
+  localStorage.setItem('mm_dark_mode', isDark ? '1' : '0');
+  if (document.getElementById('view-dashboard').classList.contains('active')) renderPieChart();
+}
+
+function applyStoredTheme() {
+  if (localStorage.getItem('mm_dark_mode') === '1') {
+    document.body.classList.add('dark-mode');
+    document.body.classList.remove('light-mode');
+    document.getElementById('btn-dark-mode').textContent = '☀️';
+  }
+}
+
+/* ============================================================
+   12. UTILIDADES DE FORMATO
+   ============================================================ */
+
+/** Formatea un número en Bolivianos (Bs.) */
+function formatBs(amount) {
+  return `Bs. ${Number(amount).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '–';
+  const [y, m, d] = dateStr.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function getCategoryEmoji(category) {
+  const map = {
+    'Alimentación': '🍔', 'Transporte': '🚗', 'Ocio': '🎮',
+    'Salud': '💊', 'Educación': '📚', 'Ropa': '👗',
+    'Hogar': '🏠', 'Tecnología': '💻', 'Otros': '📦',
+  };
+  return map[category] || '💰';
+}
+
+function showToast(message, duration = 2500) {
+  const toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), duration);
+}
+
+/* ============================================================
+   13. INICIALIZACIÓN Y EVENT LISTENERS
+   ============================================================ */
+
+document.addEventListener('DOMContentLoaded', () => {
+
+  applyStoredTheme();
+
+  /* ---- TABS AUTH ---- */
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.tab;
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
+      document.getElementById(`form-${tab}`).classList.add('active');
+      document.getElementById('login-error').textContent = '';
+      document.getElementById('reg-error').textContent   = '';
     });
-    
-    const total = obtenerTotalGastos();
-    const categorias = Object.entries(hashTable)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5);
-    
-    let html = '<div style="font-size: 12px;">';
-    categorias.forEach(([cat, monto]) => {
-        const porcentaje = (monto / total * 100).toFixed(0);
-        const ancho = porcentaje;
-        html += `
-            <div style="margin-bottom: 12px;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-                    <span style="font-weight: 500;">${cat}</span>
-                    <span>${porcentaje}%</span>
-                </div>
-                <div style="height: 6px; background: var(--border-color); border-radius: 3px; overflow: hidden;">
-                    <div style="height: 100%; width: ${ancho}%; background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));"></div>
-                </div>
-            </div>
-        `;
-    });
-    html += '</div>';
-    
-    return {
-        titulo: '📈 Gráfico',
-        html: html
-    };
-}
+  });
 
-// ============ PERSISTENCIA DE DATOS ============
-function guardarDatos() {
-    localStorage.setItem('historial', JSON.stringify(historial));
-    localStorage.setItem('widgets', JSON.stringify(widgets));
-}
+  /* ---- LOGIN ---- */
+  document.getElementById('form-login').addEventListener('submit', e => {
+    e.preventDefault();
+    const username = document.getElementById('login-user').value.trim();
+    const password = document.getElementById('login-pass').value;
+    const error    = login(username, password);
+    if (error) { document.getElementById('login-error').textContent = error; }
+    else        { document.getElementById('login-error').textContent = ''; showApp(); }
+  });
 
-function cargarDatos() {
-    const historialGuardado = localStorage.getItem('historial');
-    const widgetsGuardados = localStorage.getItem('widgets');
-    
-    if (historialGuardado) {
-        historial = JSON.parse(historialGuardado);
-    }
-    
-    if (widgetsGuardados) {
-        widgets = JSON.parse(widgetsGuardados);
-    }
-    
-    document.getElementById('nombre').value = usuario.nombre;
-    document.getElementById('ingreso').value = usuario.ingreso || '';
-    
-    mostrarInfoUsuario();
-}
+  /* ---- REGISTRO ---- */
+  document.getElementById('form-register').addEventListener('submit', e => {
+    e.preventDefault();
+    const username = document.getElementById('reg-user').value.trim();
+    const password = document.getElementById('reg-pass').value;
+    const error    = register(username, password);
+    if (error) { document.getElementById('reg-error').textContent = error; }
+    else        { document.getElementById('reg-error').textContent = ''; login(username, password); showApp(); }
+  });
 
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-        document.getElementById('modal-widget').classList.remove('active');
-        document.getElementById('sidebar').classList.remove('active');
-        document.getElementById('overlay').classList.remove('active');
+  /* ---- LOGOUT ---- */
+  document.getElementById('btn-logout').addEventListener('click', () => {
+    App.currentUser = null;
+    App.expenses    = [];
+    App.income      = { monthly: 0, daily: 0 };
+    App.goal        = null;
+    showLogin();
+  });
+
+  /* ---- MODO OSCURO ---- */
+  document.getElementById('btn-dark-mode').addEventListener('click', toggleDarkMode);
+
+  /* ---- NAVEGACIÓN ---- */
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => navigateTo(btn.dataset.view));
+  });
+
+  /* ---- FORMULARIO DE GASTO ---- */
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('exp-date').value = today;
+  document.getElementById('exp-date').max   = today;
+
+  document.getElementById('form-expense').addEventListener('submit', e => {
+    e.preventDefault();
+    const amountRaw   = document.getElementById('exp-amount').value;
+    const category    = document.getElementById('exp-category').value;
+    const date        = document.getElementById('exp-date').value;
+    const description = document.getElementById('exp-desc').value.trim();
+    const errorEl     = document.getElementById('exp-error');
+    const amount      = parseFloat(amountRaw);
+
+    if (!amountRaw || isNaN(amount) || amount <= 0) { errorEl.textContent = 'Ingresa un monto válido mayor a 0.'; return; }
+    if (!category) { errorEl.textContent = 'Selecciona una categoría.'; return; }
+    if (!date)     { errorEl.textContent = 'Selecciona una fecha.'; return; }
+
+    errorEl.textContent = '';
+    addExpense({ amount, category, date, description });
+    document.getElementById('form-expense').reset();
+    document.getElementById('exp-date').value = today;
+    showToast(`✅ Gasto de ${formatBs(amount)} agregado`);
+  });
+
+  /* ---- HISTORIAL: ORDENAMIENTO ---- */
+  document.getElementById('sort-select').addEventListener('change', renderHistory);
+
+  /* ---- HISTORIAL: ELIMINAR (delegación) ---- */
+  document.getElementById('expense-list').addEventListener('click', e => {
+    const btn = e.target.closest('.btn-delete');
+    if (!btn) return;
+    if (confirm('¿Eliminar este gasto?')) {
+      deleteExpense(btn.dataset.id);
+      renderHistory();
+      if (document.getElementById('view-dashboard').classList.contains('active')) renderDashboard();
     }
+  });
+
+  /* ---- HISTORIAL: LIMPIAR TODO ---- */
+  document.getElementById('btn-clear').addEventListener('click', () => {
+    if (!App.expenses.length) { showToast('⚠️ No hay gastos para eliminar'); return; }
+    if (confirm('¿Eliminar TODOS los gastos? Esta acción no se puede deshacer.')) {
+      clearExpenses();
+      renderHistory();
+      renderDashboard();
+      showToast('🗑️ Historial limpiado');
+    }
+  });
+
+  /* ---- INGRESOS: sincronizar mensual <-> diario ---- */
+  document.getElementById('income-monthly').addEventListener('input', e => {
+    const val = parseFloat(e.target.value);
+    if (!isNaN(val) && val > 0) {
+      document.getElementById('income-daily').value = (val / 30).toFixed(2);
+    }
+  });
+  document.getElementById('income-daily').addEventListener('input', e => {
+    const val = parseFloat(e.target.value);
+    if (!isNaN(val) && val > 0) {
+      document.getElementById('income-monthly').value = (val * 30).toFixed(2);
+    }
+  });
+
+  /* ---- GUARDAR INGRESOS ---- */
+  document.getElementById('form-income').addEventListener('submit', e => {
+    e.preventDefault();
+    const monthly = parseFloat(document.getElementById('income-monthly').value) || 0;
+    const daily   = parseFloat(document.getElementById('income-daily').value)   || 0;
+    App.income = { monthly, daily };
+    persistUserData();
+    renderFinances();
+    showToast('💾 Ingresos guardados');
+  });
+
+  /* ---- GUARDAR META DE AHORRO ---- */
+  document.getElementById('form-goal').addEventListener('submit', e => {
+    e.preventDefault();
+    const name   = document.getElementById('goal-name').value.trim();
+    const amount = parseFloat(document.getElementById('goal-amount').value);
+    const saved  = parseFloat(document.getElementById('goal-saved').value) || 0;
+
+    if (!name)                       { showToast('⚠️ Ingresa un nombre para la meta'); return; }
+    if (!amount || amount <= 0)      { showToast('⚠️ Ingresa un monto objetivo válido'); return; }
+    if (saved < 0 || saved > amount) { showToast('⚠️ El monto ahorrado no puede superar el objetivo'); return; }
+
+    App.goal = { name, amount, saved };
+    persistUserData();
+    renderFinances();
+    showToast('🎯 Meta guardada');
+  });
+
+  /* ---- ANÁLISIS: cambio de filtro de consejos ---- */
+  document.getElementById('tips-category').addEventListener('change', renderAnalysis);
+
+  showLogin();
 });
+
