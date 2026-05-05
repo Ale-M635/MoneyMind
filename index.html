@@ -1,144 +1,395 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Optimizador Inteligente de Gastos Personales</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MoneyMind – Tu dinero, tus decisiones, tu futuro</title>
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Hoja de estilos principal -->
+  <link rel="stylesheet" href="style.css" />
 </head>
-<body>
-    <!-- Navbar -->
-    <div class="navbar">
-        <button class="menu-btn" onclick="toggleMenu()">☰</button>
-        <h1 class="app-title">Optimizador de Gastos</h1>
-        <div class="navbar-spacer"></div>
+<body class="light-mode">
+
+  <!-- ===================== PANTALLA DE LOGIN ===================== -->
+  <div id="screen-login" class="screen active">
+    <div class="login-wrapper">
+      <div class="login-card">
+        <!-- Logo y branding -->
+        <div class="brand">
+          <span class="brand-icon">💰</span>
+          <h1 class="brand-name">MoneyMind</h1>
+          <p class="brand-slogan">Tu dinero, tus decisiones, tu futuro</p>
+        </div>
+
+        <!-- Tabs Login / Registro -->
+        <div class="auth-tabs">
+          <button class="tab-btn active" data-tab="login">Iniciar sesión</button>
+          <button class="tab-btn" data-tab="register">Registrarse</button>
+        </div>
+
+        <!-- Formulario Login -->
+        <form id="form-login" class="auth-form active" novalidate>
+          <div class="field-group">
+            <label for="login-user">Usuario</label>
+            <input type="text" id="login-user" placeholder="Tu nombre de usuario" autocomplete="username" />
+          </div>
+          <div class="field-group">
+            <label for="login-pass">Contraseña</label>
+            <input type="password" id="login-pass" placeholder="Tu contraseña" autocomplete="current-password" />
+          </div>
+          <p class="auth-error" id="login-error"></p>
+          <button type="submit" class="btn-primary full-width">Entrar</button>
+        </form>
+
+        <!-- Formulario Registro -->
+        <form id="form-register" class="auth-form" novalidate>
+          <div class="field-group">
+            <label for="reg-user">Usuario</label>
+            <input type="text" id="reg-user" placeholder="Elige un nombre de usuario" autocomplete="username" />
+          </div>
+          <div class="field-group">
+            <label for="reg-pass">Contraseña</label>
+            <input type="password" id="reg-pass" placeholder="Mínimo 4 caracteres" autocomplete="new-password" />
+          </div>
+          <p class="auth-error" id="reg-error"></p>
+          <button type="submit" class="btn-primary full-width">Crear cuenta</button>
+        </form>
+      </div>
     </div>
+  </div>
 
-    <!-- Sidebar -->
-    <div id="sidebar" class="sidebar">
-        <div class="sidebar-header">
-            <h2>Menú</h2>
-            <button class="close-btn" onclick="toggleMenu()">✕</button>
-        </div>
-        <nav class="sidebar-nav">
-            <button class="nav-btn active" onclick="mostrarSeccion('dashboard', this)">
-                <span class="icon">📊</span> Dashboard
-            </button>
-            <button class="nav-btn" onclick="mostrarSeccion('usuario', this)">
-                <span class="icon">👤</span> Usuario
-            </button>
-            <button class="nav-btn" onclick="mostrarSeccion('gastos', this)">
-                <span class="icon">💰</span> Mis Gastos
-            </button>
-            <button class="nav-btn" onclick="mostrarSeccion('analisis', this)">
-                <span class="icon">📈</span> Análisis
-            </button>
-            <button class="nav-btn" onclick="mostrarSeccion('optimizacion', this)">
-                <span class="icon">⚡</span> Optimización
-            </button>
-            <button class="nav-btn" onclick="mostrarSeccion('consejos', this)">
-                <span class="icon">💡</span> Consejos
-            </button>
-        </nav>
-    </div>
+  <!-- ===================== APP PRINCIPAL ===================== -->
+  <div id="screen-app" class="screen">
 
-    <!-- Overlay para cerrar sidebar en móvil -->
-    <div id="overlay" class="overlay" onclick="toggleMenu()"></div>
+    <!-- BARRA DE NAVEGACIÓN SUPERIOR -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="brand-icon-sm">💰</span>
+        <span class="topbar-title">MoneyMind</span>
+      </div>
+      <div class="topbar-right">
+        <!-- Botón modo oscuro -->
+        <button id="btn-dark-mode" class="icon-btn" title="Cambiar tema" aria-label="Cambiar tema">🌙</button>
+        <!-- Nombre de usuario -->
+        <span id="topbar-username" class="topbar-user"></span>
+        <!-- Cerrar sesión -->
+        <button id="btn-logout" class="icon-btn" title="Cerrar sesión" aria-label="Cerrar sesión">🚪</button>
+      </div>
+    </header>
 
-    <!-- Contenido Principal -->
-    <div class="contenido">
-        <!-- Dashboard Principal -->
-        <div id="dashboard" class="seccion active">
-            <div class="dashboard-header">
-                <h2>Dashboard Principal</h2>
-                <button class="btn-add" onclick="mostrarAddWidget()">+ Agregar Widget</button>
-            </div>
-            <div id="widgets-container" class="widgets-container">
-                <!-- Los widgets se cargarán dinámicamente aquí -->
-            </div>
-        </div>
+    <!-- NAVEGACIÓN INFERIOR (mobile-first) -->
+    <nav class="bottom-nav" role="navigation" aria-label="Navegación principal">
+      <button class="nav-btn active" data-view="dashboard" aria-label="Dashboard">
+        <span class="nav-icon">📊</span>
+        <span class="nav-label">Inicio</span>
+      </button>
+      <button class="nav-btn" data-view="add" aria-label="Agregar gasto">
+        <span class="nav-icon">➕</span>
+        <span class="nav-label">Agregar</span>
+      </button>
+      <button class="nav-btn" data-view="history" aria-label="Historial">
+        <span class="nav-icon">📋</span>
+        <span class="nav-label">Historial</span>
+      </button>
+      <button class="nav-btn" data-view="finances" aria-label="Finanzas">
+        <span class="nav-icon">💼</span>
+        <span class="nav-label">Finanzas</span>
+      </button>
+      <button class="nav-btn" data-view="analysis" aria-label="Análisis">
+        <span class="nav-icon">🔍</span>
+        <span class="nav-label">Análisis</span>
+      </button>
+    </nav>
 
-        <!-- Sección Usuario -->
-        <div id="usuario" class="seccion">
-            <h2>Perfil de Usuario</h2>
-            <div class="form-group">
-                <label>Nombre:</label>
-                <input id="nombre" type="text" placeholder="Ingresa tu nombre" class="input-field">
-            </div>
-            <div class="form-group">
-                <label>Ingreso Mensual (Bs):</label>
-                <input id="ingreso" type="number" placeholder="Ingresa tu ingreso mensual" class="input-field">
-            </div>
-            <button class="btn-primary" onclick="guardarUsuario()">Guardar Perfil</button>
-            <div id="usuario-info" class="info-box"></div>
+    <!-- CONTENIDO PRINCIPAL -->
+    <main class="main-content">
+
+      <!-- ===== VISTA: DASHBOARD ===== -->
+      <section id="view-dashboard" class="view active" aria-label="Dashboard">
+        <div class="view-header">
+          <h2>Resumen financiero</h2>
+          <p id="dashboard-greeting" class="subtitle"></p>
         </div>
 
-        <!-- Sección Mis Gastos -->
-        <div id="gastos" class="seccion">
-            <h2>Registrar Gastos</h2>
-            <div class="form-group">
-                <label>Categoría:</label>
-                <input id="categoria" type="text" placeholder="Ej: Alimentación, Transporte, Entretenimiento" class="input-field">
+        <!-- Tarjetas de resumen -->
+        <div class="cards-grid">
+          <div class="card card-green">
+            <div class="card-icon">💸</div>
+            <div class="card-info">
+              <span class="card-label">Total gastos</span>
+              <span class="card-value" id="stat-total">Bs. 0</span>
             </div>
-            <div class="form-group">
-                <label>Monto (Bs):</label>
-                <input id="monto" type="number" placeholder="Ingresa el monto" class="input-field">
+          </div>
+          <div class="card card-blue">
+            <div class="card-icon">💰</div>
+            <div class="card-info">
+              <span class="card-label">Ingreso mensual</span>
+              <span class="card-value" id="stat-income">Bs. 0</span>
             </div>
-            <button class="btn-primary" onclick="agregarGasto()">Agregar Gasto</button>
-            
-            <div class="gastos-section">
-                <h3>Historial de Gastos</h3>
-                <div id="lista" class="gastos-list"></div>
+          </div>
+          <div class="card card-teal">
+            <div class="card-icon">🐷</div>
+            <div class="card-info">
+              <span class="card-label">Saldo disponible</span>
+              <span class="card-value" id="stat-balance">Bs. 0</span>
             </div>
+          </div>
+          <div class="card card-orange">
+            <div class="card-icon">🎯</div>
+            <div class="card-info">
+              <span class="card-label">Meta de ahorro</span>
+              <span class="card-value" id="stat-goal-pct">0%</span>
+            </div>
+          </div>
         </div>
 
-        <!-- Sección Análisis -->
-        <div id="analisis" class="seccion">
-            <h2>Análisis de Gastos</h2>
-            <button class="btn-primary" onclick="analizar()">Generar Análisis</button>
-            <div id="resultado" class="resultado-container"></div>
-        </div>
-
-        <!-- Sección Optimización -->
-        <div id="optimizacion" class="seccion">
-            <h2>Optimización de Gastos</h2>
-            <div class="form-group">
-                <label>Selecciona Categoría a Optimizar:</label>
-                <select id="objetivo" class="input-field">
-                    <option value="">-- Selecciona una categoría --</option>
-                </select>
+        <!-- Gráfico de torta + barras -->
+        <div class="charts-row">
+          <!-- Torta -->
+          <div class="chart-section chart-pie-section">
+            <h3>Distribución de gastos</h3>
+            <div class="pie-wrapper">
+              <svg id="pie-chart" viewBox="0 0 200 200" width="160" height="160" aria-label="Gráfico de torta por categoría" role="img"></svg>
+              <div id="pie-legend" class="pie-legend"></div>
             </div>
-            <div class="form-group">
-                <label>Presupuesto Total Mensual (Bs):</label>
-                <input id="presupuesto" type="number" placeholder="Ingresa tu presupuesto total" class="input-field">
+            <p id="pie-empty" class="empty-msg">Sin datos aún.</p>
+          </div>
+          <!-- Barras -->
+          <div class="chart-section">
+            <h3>Gastos por categoría</h3>
+            <div id="bar-chart" class="bar-chart" role="img" aria-label="Gráfico de gastos por categoría"></div>
+          </div>
+        </div>
+
+        <!-- Últimos gastos -->
+        <div class="recent-section">
+          <h3>Últimos gastos</h3>
+          <ul id="recent-list" class="recent-list"></ul>
+          <p id="recent-empty" class="empty-msg">Aún no hay gastos registrados.</p>
+        </div>
+      </section>
+
+      <!-- ===== VISTA: AGREGAR GASTO ===== -->
+      <section id="view-add" class="view" aria-label="Agregar gasto">
+        <div class="view-header">
+          <h2>Registrar gasto</h2>
+          <p class="subtitle">Lleva el control de cada movimiento</p>
+        </div>
+
+        <form id="form-expense" class="expense-form" novalidate>
+          <!-- Monto -->
+          <div class="field-group">
+            <label for="exp-amount">💵 Monto</label>
+            <input type="number" id="exp-amount" placeholder="0.00" min="0.01" step="0.01" />
+          </div>
+
+          <!-- Categoría -->
+          <div class="field-group">
+            <label for="exp-category">🏷️ Categoría</label>
+            <select id="exp-category">
+              <option value="">Selecciona una categoría</option>
+              <option value="Alimentación">🍔 Alimentación</option>
+              <option value="Transporte">🚗 Transporte</option>
+              <option value="Ocio">🎮 Ocio</option>
+              <option value="Salud">💊 Salud</option>
+              <option value="Educación">📚 Educación</option>
+              <option value="Ropa">👗 Ropa</option>
+              <option value="Hogar">🏠 Hogar</option>
+              <option value="Tecnología">💻 Tecnología</option>
+              <option value="Otros">📦 Otros</option>
+            </select>
+          </div>
+
+          <!-- Fecha -->
+          <div class="field-group">
+            <label for="exp-date">📅 Fecha</label>
+            <input type="date" id="exp-date" />
+          </div>
+
+          <!-- Descripción -->
+          <div class="field-group">
+            <label for="exp-desc">📝 Descripción</label>
+            <input type="text" id="exp-desc" placeholder="Ej: Almuerzo en restaurante" maxlength="80" />
+          </div>
+
+          <p class="auth-error" id="exp-error"></p>
+
+          <button type="submit" class="btn-primary full-width">➕ Agregar gasto</button>
+        </form>
+
+        <!-- Toast de confirmación -->
+        <div id="toast" class="toast" role="alert" aria-live="polite"></div>
+      </section>
+
+      <!-- ===== VISTA: HISTORIAL ===== -->
+      <section id="view-history" class="view" aria-label="Historial de gastos">
+        <div class="view-header">
+          <h2>Historial de gastos</h2>
+          <p class="subtitle">Todos tus movimientos en un lugar</p>
+        </div>
+
+        <!-- Controles de ordenamiento y limpieza -->
+        <div class="history-controls">
+          <div class="sort-group">
+            <label for="sort-select">Ordenar por:</label>
+            <select id="sort-select">
+              <option value="date-desc">Fecha (más reciente)</option>
+              <option value="date-asc">Fecha (más antigua)</option>
+              <option value="amount-desc">Monto (mayor)</option>
+              <option value="amount-asc">Monto (menor)</option>
+            </select>
+          </div>
+          <button id="btn-clear" class="btn-danger">🗑️ Limpiar historial</button>
+        </div>
+
+        <!-- Lista de gastos -->
+        <ul id="expense-list" class="expense-list"></ul>
+        <p id="history-empty" class="empty-msg">No hay gastos registrados aún.</p>
+      </section>
+
+      <!-- ===== VISTA: FINANZAS (ingresos + meta de ahorro) ===== -->
+      <section id="view-finances" class="view" aria-label="Finanzas personales">
+        <div class="view-header">
+          <h2>Mis finanzas</h2>
+          <p class="subtitle">Registra tus ingresos y define tu meta de ahorro</p>
+        </div>
+
+        <!-- Ingresos -->
+        <div class="finance-card">
+          <h3>💵 Ingresos</h3>
+          <form id="form-income" novalidate>
+            <div class="income-grid">
+              <div class="field-group">
+                <label for="income-monthly">Ingreso mensual (Bs.)</label>
+                <input type="number" id="income-monthly" placeholder="Ej: 3500" min="0" step="1" />
+              </div>
+              <div class="field-group">
+                <label for="income-daily">Ingreso diario (Bs.)</label>
+                <input type="number" id="income-daily" placeholder="Ej: 120" min="0" step="1" />
+              </div>
             </div>
-            <button class="btn-primary" onclick="optimizar()">Calcular Optimización</button>
-            <div id="optResultado" class="resultado-container"></div>
+            <p class="field-hint">💡 Si ingresas el mensual, el diario se calcula automáticamente (÷30) y viceversa.</p>
+            <button type="submit" class="btn-primary full-width">💾 Guardar ingresos</button>
+          </form>
         </div>
 
-        <!-- Sección Consejos -->
-        <div id="consejos" class="seccion">
-            <h2>Consejos y Recomendaciones</h2>
-            <button class="btn-primary" onclick="generarConsejos()">Generar Consejos</button>
-            <div id="consejos-container" class="consejos-container"></div>
-        </div>
-    </div>
-
-    <!-- Modal para agregar widgets -->
-    <div id="modal-widget" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="cerrarModal()">&times;</span>
-            <h3>Agregar Widget</h3>
-            <div class="widget-options">
-                <button class="widget-option" onclick="agregarWidgetDashboard('resumen')">📊 Resumen Total</button>
-                <button class="widget-option" onclick="agregarWidgetDashboard('top-categoria')">🏆 Top Categoría</button>
-                <button class="widget-option" onclick="agregarWidgetDashboard('consejos-rapidos')">💡 Consejos Rápidos</button>
-                <button class="widget-option" onclick="agregarWidgetDashboard('progreso')">⚡ Progreso</button>
-                <button class="widget-option" onclick="agregarWidgetDashboard('grafico')">📈 Gráfico</button>
+        <!-- Resumen ingreso vs gasto -->
+        <div class="finance-card" id="income-summary-card">
+          <h3>📊 Resumen del mes</h3>
+          <div class="income-summary">
+            <div class="income-row">
+              <span>Ingreso mensual</span>
+              <span class="val-green" id="sum-income">Bs. 0</span>
             </div>
+            <div class="income-row">
+              <span>Total gastado</span>
+              <span class="val-red" id="sum-spent">Bs. 0</span>
+            </div>
+            <div class="income-row income-row-total">
+              <span>Saldo disponible</span>
+              <span id="sum-balance">Bs. 0</span>
+            </div>
+          </div>
+          <!-- Barra de progreso gasto/ingreso -->
+          <div class="spend-bar-wrap">
+            <div class="spend-bar-track">
+              <div id="spend-bar-fill" class="spend-bar-fill"></div>
+            </div>
+            <span id="spend-bar-pct" class="spend-bar-pct">0%</span>
+          </div>
+          <p id="spend-bar-msg" class="spend-bar-msg"></p>
         </div>
-    </div>
 
-    <script src="script.js"></script>
+        <!-- Regla 50/30/20 -->
+        <div class="finance-card">
+          <h3>📐 Regla 50/30/20</h3>
+          <p class="field-hint" style="margin-bottom:14px">Distribución recomendada de tu ingreso mensual.</p>
+          <div id="rule-breakdown" class="rule-breakdown"></div>
+          <p id="rule-empty" class="empty-msg">Ingresa tu ingreso mensual para ver la distribución.</p>
+        </div>
+
+        <!-- Meta de ahorro -->
+        <div class="finance-card">
+          <h3>🎯 Meta de ahorro</h3>
+          <form id="form-goal" novalidate>
+            <div class="field-group">
+              <label for="goal-name">Nombre de la meta</label>
+              <input type="text" id="goal-name" placeholder="Ej: Viaje a Santa Cruz, Laptop nueva..." maxlength="60" />
+            </div>
+            <div class="field-group">
+              <label for="goal-amount">Monto objetivo (Bs.)</label>
+              <input type="number" id="goal-amount" placeholder="Ej: 5000" min="1" step="1" />
+            </div>
+            <div class="field-group">
+              <label for="goal-saved">Ya tengo ahorrado (Bs.)</label>
+              <input type="number" id="goal-saved" placeholder="0" min="0" step="1" />
+            </div>
+            <button type="submit" class="btn-primary full-width">🎯 Guardar meta</button>
+          </form>
+
+          <!-- Progreso de la meta -->
+          <div id="goal-progress" class="goal-progress" style="display:none">
+            <div class="goal-header">
+              <span id="goal-title" class="goal-title"></span>
+              <span id="goal-pct-label" class="goal-pct-label"></span>
+            </div>
+            <div class="goal-track">
+              <div id="goal-fill" class="goal-fill"></div>
+            </div>
+            <div class="goal-amounts">
+              <span id="goal-saved-label"></span>
+              <span id="goal-target-label"></span>
+            </div>
+            <p id="goal-months-msg" class="goal-months-msg"></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== VISTA: ANÁLISIS ===== -->
+      <section id="view-analysis" class="view" aria-label="Análisis de gastos">
+        <div class="view-header">
+          <h2>Análisis inteligente</h2>
+          <p class="subtitle">Entiende tus hábitos financieros</p>
+        </div>
+
+        <!-- Mensaje de análisis principal -->
+        <div id="analysis-alert" class="analysis-alert"></div>
+
+        <!-- Desglose por categoría -->
+        <div class="analysis-breakdown">
+          <h3>Desglose por categoría</h3>
+          <div id="breakdown-list" class="breakdown-list"></div>
+        </div>
+
+        <!-- Sugerencias -->
+        <div class="suggestions-section">
+          <h3>💡 Consejos personalizados de ahorro</h3>
+          <div class="tips-filter">
+            <label for="tips-category">Ver consejos para:</label>
+            <select id="tips-category">
+              <option value="general">📋 General</option>
+              <option value="Alimentación">🍔 Alimentación</option>
+              <option value="Transporte">🚗 Transporte</option>
+              <option value="Ocio">🎮 Ocio</option>
+              <option value="Salud">💊 Salud</option>
+              <option value="Educación">📚 Educación</option>
+              <option value="Ropa">👗 Ropa</option>
+              <option value="Hogar">🏠 Hogar</option>
+              <option value="Tecnología">💻 Tecnología</option>
+            </select>
+          </div>
+          <ul id="suggestions-list" class="suggestions-list"></ul>
+          <p id="suggestions-empty" class="empty-msg">Agrega gastos para recibir sugerencias.</p>
+        </div>
+      </section>
+
+    </main>
+  </div><!-- fin #screen-app -->
+
+  <!-- Script principal -->
+  <script src="script.js"></script>
 </body>
 </html>
